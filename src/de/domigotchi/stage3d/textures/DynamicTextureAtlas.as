@@ -41,7 +41,7 @@ package de.domigotchi.stage3d.textures
 		
 		private var _width:int;
 		private var _height:int;
-		private var _renderTexture:de.domigotchi.stage3d.textures.TextureWrapper;
+		private var _renderTexture:TextureWrapper;
 		private var _renderTextureInitialized:Boolean;
 		private var _currentX:int = 0;
 		
@@ -76,15 +76,15 @@ package de.domigotchi.stage3d.textures
 		private function onContextCreated(e:Event=null):void 
 		{
 			_context3D = _stage3D.context3D;
-			_vertexBuffer = _context3D.createVertexBuffer(de.domigotchi.stage3d.textures.Quad.NUM_VERTICES, de.domigotchi.stage3d.textures.Quad.DATA_32_PER_VERTEX);
-			_indexBuffer = _context3D.createIndexBuffer(de.domigotchi.stage3d.textures.Quad.NUM_INDICES);
+			_vertexBuffer = _context3D.createVertexBuffer(Quad.NUM_VERTICES, Quad.DATA_32_PER_VERTEX);
+			_indexBuffer = _context3D.createIndexBuffer(Quad.NUM_INDICES);
 			_program3D = _context3D.createProgram();
 			_program3D.upload(_vertexShaderBytes, _fragmentShaderBytes);
-			_renderTexture = de.domigotchi.stage3d.textures.TextureWrapper.createRenderTextureFromSize(_context3D, _width, _height);
+			_renderTexture = TextureWrapper.createRenderTextureFromSize(_context3D, _width, _height);
 			_renderTextureInitialized = false;
 		}
 		
-		public function addTextureWrapper(textureWrapper:de.domigotchi.stage3d.textures.TextureWrapper):void
+		public function addTextureWrapper(textureWrapper:TextureWrapper):void
 		{
 			if (textureWrapper.width > _width || textureWrapper.height > _height)
 				throw new Error(" to big to render");
@@ -97,22 +97,22 @@ package de.domigotchi.stage3d.textures
 			
 		}
 		
-		private function createGeometryForTexture(textureWrapper:de.domigotchi.stage3d.textures.TextureWrapper):void 
+		private function createGeometryForTexture(textureWrapper:TextureWrapper):void 
 		{
 			
-			var quad:de.domigotchi.stage3d.textures.Quad;
+			var quad:Quad;
 			_vertexBufferBytes.length = 0;
 			_indexBufferBytes.length = 0;
 			var x:Number = _currentX/_width;
 			var y:Number = 0;
 			var width:Number = textureWrapper.width/_width;
 			var height:Number = textureWrapper.height/_height;
-			quad = new de.domigotchi.stage3d.textures.Quad();
+			quad = new Quad();
 			quad.init(x, y, width, height);
 			quad.fillBytes(_vertexBufferBytes, _indexBufferBytes);
 
-			_vertexBuffer.uploadFromByteArray(_vertexBufferBytes, 0, 0, de.domigotchi.stage3d.textures.Quad.NUM_VERTICES);
-			_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, de.domigotchi.stage3d.textures.Quad.NUM_INDICES);
+			_vertexBuffer.uploadFromByteArray(_vertexBufferBytes, 0, 0, Quad.NUM_VERTICES);
+			_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, Quad.NUM_INDICES);
 			
 			_currentX += textureWrapper.width;
 			
@@ -130,7 +130,7 @@ package de.domigotchi.stage3d.textures
 					_renderTextureInitialized = true;
 				}
 				
-				for each(var texture:de.domigotchi.stage3d.textures.TextureWrapper in _newTextureWrappersMap)
+				for each(var texture:TextureWrapper in _newTextureWrappersMap)
 				{
 					createGeometryForTexture(texture);
 					_context3D.setProgram(_program3D);
@@ -152,11 +152,11 @@ package de.domigotchi.stage3d.textures
 				
 					_vertexBufferBytes.length = 0;
 					_indexBufferBytes.length = 0;
-					var quad:de.domigotchi.stage3d.textures.Quad = new de.domigotchi.stage3d.textures.Quad();
+					var quad:Quad = new Quad();
 					quad.init(0, 0, 1, 1);
 					quad.fillBytes(_vertexBufferBytes, _indexBufferBytes);
-					_vertexBuffer.uploadFromByteArray(_vertexBufferBytes, 0, 0, de.domigotchi.stage3d.textures.Quad.NUM_VERTICES);
-					_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, de.domigotchi.stage3d.textures.Quad.NUM_INDICES);
+					_vertexBuffer.uploadFromByteArray(_vertexBufferBytes, 0, 0, Quad.NUM_VERTICES);
+					_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, Quad.NUM_INDICES);
 					
 					_context3D.setVertexBufferAt(0, _vertexBuffer, 0, Context3DVertexBufferFormat.FLOAT_2);
 					_context3D.setVertexBufferAt(1, _vertexBuffer, 2, Context3DVertexBufferFormat.FLOAT_2);
