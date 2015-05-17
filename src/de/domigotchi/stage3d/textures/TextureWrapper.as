@@ -14,7 +14,9 @@ package de.domigotchi.stage3d.textures
 	 */
 	public class TextureWrapper
 	{
+		private var _parent:TextureWrapper;
 		private var _texture:TextureBase;
+		
 		private var _textureWidth:uint;
 		private var _textureHeight:uint;
 		private var _id:String;
@@ -25,17 +27,25 @@ package de.domigotchi.stage3d.textures
 		
 		static private var _helperPoint:Point = new Point();
 		
-		public function TextureWrapper(id:String) 
+		
+		
+		public function TextureWrapper(id:String, width:uint, height:uint, uMultiplier:Number = 1, vMultiplier:Number = 1) 
 		{
 			_id = id;
-			
-		}
-		protected function init(texture:TextureBase, width:uint, height:uint, uMultiplier:Number = 1, vMultiplier:Number = 1):TextureWrapper
-		{
 			_uvMultiplier = Vector.<Number>([uMultiplier, vMultiplier, 1,  1]);
 			_textureWidth = width;
 			_textureHeight = height;
+		}
+		
+		internal function initWithTexture(texture:TextureBase):TextureWrapper
+		{
 			_texture = texture;
+			return this;
+		}
+		
+		protected function initWithParent(parent:TextureWrapper):TextureWrapper
+		{
+			_parent = parent;
 			return this;
 		}
 		
@@ -46,7 +56,7 @@ package de.domigotchi.stage3d.textures
 		
 		public function get nativeTexture():TextureBase 
 		{
-			return _texture;
+			return _parent ? _parent.nativeTexture : _texture;
 		}
 		
 		public function get id():String 
@@ -64,6 +74,11 @@ package de.domigotchi.stage3d.textures
 			return _textureHeight;
 		}
 		
+		public function getSubTexture(id:String, width:int, height:int):TextureWrapper 
+		{
+			return new TextureWrapper(id, width, height).initWithParent(this);
+		}
+		
 		public static function createFromBitmapData(context3D:Context3D, id:String, bitmapData:BitmapData):TextureWrapper
 		{
 			var orginalWidth:uint = bitmapData.width;
@@ -78,7 +93,7 @@ package de.domigotchi.stage3d.textures
 			}
 			var texture:Texture = context3D.createTexture(nextPowerOfTwoWidth, nextPowerOfTwoHeight, Context3DTextureFormat.BGRA, false);
 			texture.uploadFromBitmapData(bitmapData);
-			return new TextureWrapper(id).init(texture, orginalWidth, orginalHeight, orginalWidth/nextPowerOfTwoWidth, orginalHeight/nextPowerOfTwoHeight);
+			return new TextureWrapper(id, orginalWidth, orginalHeight, orginalWidth/nextPowerOfTwoWidth, orginalHeight/nextPowerOfTwoHeight).initWithTexture(texture);
 		}
 		
 		static public function createRenderTextureFromSize(context3D:Context3D, width:int, height:int):TextureWrapper 
@@ -86,10 +101,11 @@ package de.domigotchi.stage3d.textures
 			var nextPowerOfTwoWidth:uint = getNextPowerOf2(width);
 			var nextPowerOfTwoHeight:uint = getNextPowerOf2(height);
 			var texture:Texture = context3D.createTexture(nextPowerOfTwoWidth, nextPowerOfTwoHeight, Context3DTextureFormat.BGRA, true);
-			return new TextureWrapper("rendertexture").init(texture, nextPowerOfTwoWidth, nextPowerOfTwoHeight);
+			return new TextureWrapper("rendertexture", nextPowerOfTwoWidth, nextPowerOfTwoHeight).initWithTexture(texture);
 		}
 		
-		private static function getNextPowerOf2(n:uint):uint
+		
+		public static function getNextPowerOf2(n:uint):uint
 		{
 			var count:uint = 0;
  
@@ -104,6 +120,11 @@ package de.domigotchi.stage3d.textures
 			}
 			 
 			return 1<<count;
+		}
+		
+		internal function setUVRect(x:Number, y:Number, width:Number, height:Number):void 
+		{
+			
 		}
 	}
 
