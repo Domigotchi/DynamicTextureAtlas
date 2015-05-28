@@ -1,16 +1,22 @@
-package de.domigotchi.stage3d.textures 
+package de.domigotchi.stage3d.dynamicAtlas 
 {
-	import de.domigotchi.stage3d.textures.TextureWrapper;
+	import com.adobe.utils.AGALMiniAssembler;
+	import de.domigotchi.stage3d.dynamicAtlas.factories.TextureFactory;
+	import de.domigotchi.stage3d.dynamicAtlas.TextureWrapper;
 	import flash.display.Stage3D;
 	import flash.display3D.Context3D;
+	import flash.display3D.Context3DBlendFactor;
+	import flash.display3D.Context3DCompareMode;
 	import flash.display3D.Context3DProgramType;
 	import flash.display3D.Context3DTextureFormat;
 	import flash.display3D.Context3DVertexBufferFormat;
 	import flash.display3D.IndexBuffer3D;
 	import flash.display3D.Program3D;
 	import flash.display3D.textures.Texture;
+	import flash.display3D.textures.TextureBase;
 	import flash.display3D.VertexBuffer3D;
 	import flash.events.Event;
+	import flash.geom.Rectangle;
 	import flash.utils.ByteArray;
 	import flash.utils.Dictionary;
 	/**
@@ -19,7 +25,7 @@ package de.domigotchi.stage3d.textures
 	 */
 	public class DynamicTextureAtlas 
 	{
-		static public const DEBUG:Boolean = true;
+		static public const DEBUG:Boolean = false;
 		
 		
 		private var _vertexBufferBytes:ByteArray = new ByteArray();
@@ -52,11 +58,24 @@ package de.domigotchi.stage3d.textures
 		private var _drawQuad:DynamicQuad = new DynamicQuad();
 		
 		private static var _helperVector:Vector.<Number> = new Vector.<Number>();
+		private var _currentHeight:Number = 0;
+		private var _currentY:Number = 0;
+		private var _currentMaxY:Number = 0;
+		private var _helperRectangle:Rectangle = new Rectangle();
 		
-		public function DynamicTextureAtlas(stage3D:Stage3D, width:int, height:int) 
+		private var _bIsTextureStreamingEnabled:Boolean = true;
+		
+		public function DynamicTextureAtlas(stage3D:Stage3D, width:int, height:int, bIsTextureStreamingEnabled = false) 
 		{
+			_bIsTextureStreamingEnabled = bIsTextureStreamingEnabled;
 			_atlasHeight = TextureWrapper.getNextPowerOf2(height);
 			_atlasWidth = TextureWrapper.getNextPowerOf2(width);
+			
+			if (_atlasWidth >= 1024 || _atlasHeight >= 1024 && bIsTextureStreamingEnabled)
+			{
+				trace("warning: drawing on big renderTextures can be slow on mobile devices")
+			}
+			
 			_stage3D = stage3D;
 			init();	
 		}
@@ -96,9 +115,49 @@ package de.domigotchi.stage3d.textures
 			_vertexBuffer.uploadFromByteArray(_vertexBufferBytes, 0, 0, DynamicQuad.NUM_VERTICES);
 			_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, DynamicQuad.NUM_INDICES);
 			
-			var texture:Texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
+			var texture:TextureBase;
+			try
+			{
+				texture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA_PACKED, true);
+			}
+			catch (e:Error)
+			{
+				texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA_PACKED, true);
+			}
 			_renderTexture.initWithTexture(texture);
 			_renderTextureInitialized = false;
+			
+			if (_isDirty)
+				update();
+		}
+		
+		public function addTextureFactory(textureFactory:TextureFactory):TextureWrapper
+		{
+			var subTexture:TextureWrapper;
+			if (textureFactory.width > _atlasWidth || textureFactory.height > _atlasHeight)
+				throw new Error(" to big to render");
+			if (_newTextureWrappersMap[textureFactory.id] == null)
+			{
+				subTexture = _renderTexture.getSubTexture(textureFactory.id, textureFactory.width, textureFactory.height);
+				subTexture.initWithFactory(textureFactory);
+				textureFactory.addOnCompleteCallback(onFactoryTextureCreationComplete);
+				_atlasTexturesMap[textureFactory.id] = subTexture;
+				_numTextures ++;
+				
+				if (!_bIsTextureStreamingEnabled)
+				{
+					subTexture.nativeTexture;
+					_isDirty = true;
+				}
+			}
+			
+			return subTexture;
+		}
+		
+		private function onFactoryTextureCreationComplete(factory:TextureFactory):void 
+		{
+			_newTextureWrappersMap[factory.id] = factory.textureWrapper;
+			_isDirty = true;
 		}
 		
 		public function addTextureWrapper(InTexture:TextureWrapper):TextureWrapper
@@ -121,16 +180,21 @@ package de.domigotchi.stage3d.textures
 		
 		public function update():void
 		{
+			if (!_context3D) return;
+			
 			if (_isDirty || DEBUG)
 			{
 				_context3D.setProgram(_program3D);
+				_context3D.setDepthTest(false, Context3DCompareMode.ALWAYS);
+				_context3D.setBlendFactors(Context3DBlendFactor.ONE, Context3DBlendFactor.ZERO);
 				_context3D.setVertexBufferAt(0, _vertexBuffer, 0, Context3DVertexBufferFormat.FLOAT_1);
 				_context3D.setVertexBufferAt(1, _vertexBuffer, 1, Context3DVertexBufferFormat.FLOAT_2);
 		
 				if (_isDirty)
 				{
-					_currentX = 0;
-					_context3D.setRenderToTexture(_renderTexture.nativeTexture, false, 1);
+
+					_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+					//_context3D.clear();
 					if (!_renderTextureInitialized)
 					{
 						_context3D.clear();
@@ -139,22 +203,21 @@ package de.domigotchi.stage3d.textures
 					
 					var x:Number = 0;
 					var y:Number = 0;
-					var maxY:Number = 0;
-					var currentHeight:Number = 0;
-					var _currentY:Number = 0;
-					for each(var texture:TextureWrapper in _newTextureWrappersMap)
+					for(var key:String in _newTextureWrappersMap)
 					{
+						var texture:TextureWrapper = _newTextureWrappersMap[key];
 						if (_currentX + texture.width > _atlasWidth)
 						{
 							_currentX = 0;
-							_currentY = maxY;
+							_currentY = _currentMaxY;
 						}
 						x = _currentX / _atlasWidth;
 						y = _currentY / _atlasHeight;
 						draw(x, y, texture);
-						currentHeight = _currentY + texture.height;
-						maxY = maxY < currentHeight ? currentHeight : maxY;
+						_currentHeight = _currentY + texture.height;
+						_currentMaxY = _currentMaxY < _currentHeight ? _currentHeight : _currentMaxY;
 						_currentX += texture.width;
+						delete(_newTextureWrappersMap[key]);
 						
 					}
 					_isDirty = false;
@@ -168,6 +231,7 @@ package de.domigotchi.stage3d.textures
 				_context3D.setVertexBufferAt(0, null);
 				_context3D.setVertexBufferAt(1, null);
 				_context3D.setTextureAt(0, null);
+				_context3D.setScissorRectangle(null);
 			}
 
 		}
@@ -177,16 +241,16 @@ package de.domigotchi.stage3d.textures
 			var width:Number = texture.width / _atlasWidth;
 			var height:Number = texture.height / _atlasHeight;
 			_drawQuad.init(x, y, width, height);
-			
+			_helperRectangle.setTo(x * _atlasWidth, y * _atlasHeight, texture.width, texture.height);
+			if(_helperRectangle.x < _atlasWidth && _helperRectangle.y < _atlasHeight)
+				_context3D.setScissorRectangle(_helperRectangle);
+			else
+				_context3D.setScissorRectangle(null);
 			var subTexture:TextureWrapper = _atlasTexturesMap[texture.id];
 			if (subTexture)
-				subTexture.setUVRect(x , y, width, height);
+				subTexture.setUVRegion(x * _atlasWidth , y * _atlasHeight, width * _atlasWidth, height * _atlasHeight);
 			
-			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 0, _drawQuad.setVertexConstant(0, _helperVector));
-			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 1, _drawQuad.setVertexConstant(1, _helperVector));
-			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 2, _drawQuad.setVertexConstant(2, _helperVector));
-			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 3, _drawQuad.setVertexConstant(3, _helperVector));
-			
+			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 0, _drawQuad.setVertexConstant(_helperVector), 4);
 			_context3D.setProgramConstantsFromVector(Context3DProgramType.VERTEX, 4, texture.uvMultiplier);
 			
 			_context3D.setTextureAt(0, texture.nativeTexture);

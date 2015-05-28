@@ -1,4 +1,4 @@
-package de.domigotchi.stage3d.textures 
+package de.domigotchi.stage3d.dynamicAtlas 
 {
 	import flash.sampler.getSize;
 	import flash.utils.ByteArray;
@@ -7,9 +7,9 @@ package de.domigotchi.stage3d.textures
 	 * ...
 	 * @author Dominik Saur
 	 */
-	public class DynamicQuad 
+	public class StaticQuad 
 	{
-		public static const DATA_32_PER_VERTEX:uint = 3;
+		public static const DATA_32_PER_VERTEX:uint = 4;
 		public static const NUM_VERTICES:uint = 4;
 		public static const NUM_INDICES:uint = 6;
 		
@@ -19,12 +19,12 @@ package de.domigotchi.stage3d.textures
 		private var _width:Number = 0;
 		private var _height:Number = 0;
 		
-		public function DynamicQuad() 
+		public function StaticQuad() 
 		{
 			
 		}
 		
-		public function init(x:Number, y:Number, width:Number, height:Number):DynamicQuad
+		public function init(x:Number, y:Number, width:Number, height:Number):StaticQuad
 		{
 			_height = height;
 			_width = width;
@@ -43,31 +43,39 @@ package de.domigotchi.stage3d.textures
 				indexBytes.endian = Endian.LITTLE_ENDIAN;
 			
 			var currentQuadOffset:int = (indexBytes.position / 12) * 4;	
+			var normalizedX:Number = (_x * 2) - 1;
+			var normalizedY:Number = -((_y * 2) - 1);
+			var normalizedWidth:Number = normalizedX + _width * 2;
+			var normalizedHeight:Number = normalizedY - _height * 2;
 			
 			//Vertex 1
-			//id
-			vertexBytes.writeFloat(0);
+			//pos
+			vertexBytes.writeFloat(normalizedX);
+			vertexBytes.writeFloat(normalizedY);
 			//uv
 			vertexBytes.writeFloat(0);
 			vertexBytes.writeFloat(0);
 			
 			//Vertex 2
-			//id
-			vertexBytes.writeFloat(1);
+			//pos
+			vertexBytes.writeFloat(normalizedX);
+			vertexBytes.writeFloat(normalizedHeight);
 			//uv
 			vertexBytes.writeFloat(0);
 			vertexBytes.writeFloat(1);
 			
 			//Vertex 3
-			//id
-			vertexBytes.writeFloat(2);
+			//pos
+			vertexBytes.writeFloat(normalizedWidth);
+			vertexBytes.writeFloat(normalizedHeight);
 			//uv
 			vertexBytes.writeFloat(1);
 			vertexBytes.writeFloat(1);
 						
 			//Vertex 4
-			//id
-			vertexBytes.writeFloat(3);
+			//pos
+			vertexBytes.writeFloat(normalizedWidth);
+			vertexBytes.writeFloat(normalizedY);
 			//uv
 			vertexBytes.writeFloat(1);
 			vertexBytes.writeFloat(0);
@@ -81,42 +89,6 @@ package de.domigotchi.stage3d.textures
 			indexBytes.writeShort(currentQuadOffset + 3);	
 		}
 		
-		public function setVertexConstant(index:uint, outVector:Vector.<Number>):Vector.<Number>
-		{
-			outVector.length = 4;
-			
-			var normalizedX:Number = (_x * 2) - 1;
-			var normalizedY:Number = -((_y * 2) - 1);
-			var normalizedWidth:Number = normalizedX + _width * 2;
-			var normalizedHeight:Number = normalizedY - _height * 2;
-			
-			if (index == 0)
-			{
-				outVector[0] = normalizedX;
-				outVector[1] = normalizedY;
-			} 
-			else if (index == 1)
-			{
-				outVector[0] = normalizedX;
-				outVector[1] = normalizedHeight;
-			}
-			else if (index == 2)
-			{
-				outVector[0] = normalizedWidth;
-				outVector[1] = normalizedHeight;
-			}
-			else if (index == 3)
-			{
-				outVector[0] = normalizedWidth;
-				outVector[1] = normalizedY;
-			}
-			else throw new Error("invalid vertex Index");
-			
-			outVector[2] = 0;
-			outVector[3] = 1;
-			
-			return outVector;
-		}
 	
 		
 		
