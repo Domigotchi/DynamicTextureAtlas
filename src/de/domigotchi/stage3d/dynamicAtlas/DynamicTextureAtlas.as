@@ -45,7 +45,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 		
 		private var _atlasTexturesMap:Dictionary = new Dictionary();
 		
-		private var _newTextureWrappersMap:Dictionary = new Dictionary();
+		private var _newTextureWrappersList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
 		private var _numTextures:uint = 0;
 		private var _program3D:Program3D;
 		
@@ -64,14 +64,15 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _helperRectangle:Rectangle = new Rectangle();
 		
 		private var _bIsTextureStreamingEnabled:Boolean = true;
+		private var _waitForNextFrame:int;
 		
 		public function DynamicTextureAtlas(stage3D:Stage3D, width:int, height:int, bIsTextureStreamingEnabled = false) 
 		{
 			_bIsTextureStreamingEnabled = bIsTextureStreamingEnabled;
-			_atlasHeight = TextureWrapper.getNextPowerOf2(height);
-			_atlasWidth = TextureWrapper.getNextPowerOf2(width);
+			_atlasWidth = width;
+			_atlasHeight = height;
 			
-			if (_atlasWidth >= 1024 || _atlasHeight >= 1024 && bIsTextureStreamingEnabled)
+			if ((_atlasWidth >= 1024 || _atlasHeight >= 1024) && _bIsTextureStreamingEnabled)
 			{
 				trace("warning: drawing on big renderTextures can be slow on mobile devices")
 			}
@@ -118,11 +119,13 @@ package de.domigotchi.stage3d.dynamicAtlas
 			var texture:TextureBase;
 			try
 			{
-				texture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA_PACKED, true);
+				texture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
 			catch (e:Error)
 			{
-				texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA_PACKED, true);
+				_atlasWidth = TextureWrapper.getNextPowerOf2(_atlasWidth);
+				_atlasHeight = TextureWrapper.getNextPowerOf2(_atlasHeight);
+				texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
 			_renderTexture.initWithTexture(texture);
 			_renderTextureInitialized = false;
@@ -134,11 +137,9 @@ package de.domigotchi.stage3d.dynamicAtlas
 		public function addTextureFactory(textureFactory:TextureFactory):TextureWrapper
 		{
 			var subTexture:TextureWrapper;
-			if (textureFactory.width > _atlasWidth || textureFactory.height > _atlasHeight)
-				throw new Error(" to big to render");
-			if (_newTextureWrappersMap[textureFactory.id] == null)
+			if (_atlasTexturesMap[textureFactory.id] == null)
 			{
-				subTexture = _renderTexture.getSubTexture(textureFactory.id, textureFactory.width, textureFactory.height);
+				subTexture = _renderTexture.getSubTexture(textureFactory.id, 1, 1);
 				subTexture.initWithFactory(textureFactory);
 				textureFactory.addOnCompleteCallback(onFactoryTextureCreationComplete);
 				_atlasTexturesMap[textureFactory.id] = subTexture;
@@ -156,7 +157,10 @@ package de.domigotchi.stage3d.dynamicAtlas
 		
 		private function onFactoryTextureCreationComplete(factory:TextureFactory):void 
 		{
-			_newTextureWrappersMap[factory.id] = factory.textureWrapper;
+			var currentTextureWrapper:TextureWrapper = _atlasTexturesMap[factory.id];
+			currentTextureWrapper.initWithTexture(factory.textureWrapper.nativeTexture, factory.textureWrapper.width, factory.textureWrapper.height);
+			
+			_newTextureWrappersList[_newTextureWrappersList.length] = factory.textureWrapper;
 			_isDirty = true;
 		}
 		
@@ -165,10 +169,10 @@ package de.domigotchi.stage3d.dynamicAtlas
 			var subTexture:TextureWrapper;
 			if (InTexture.width > _atlasWidth || InTexture.height > _atlasHeight)
 				throw new Error(" to big to render");
-			if (_newTextureWrappersMap[InTexture.id] == null)
+			if (_atlasTexturesMap[InTexture.id] == null)
 			{
 				subTexture = _renderTexture.getSubTexture(InTexture.id, InTexture.width, InTexture.height);
-				_newTextureWrappersMap[InTexture.id] = InTexture;
+				_newTextureWrappersList[_newTextureWrappersList.length] = InTexture;
 				_atlasTexturesMap[InTexture.id] = subTexture;
 				_numTextures ++;
 				_isDirty = true;
@@ -192,20 +196,30 @@ package de.domigotchi.stage3d.dynamicAtlas
 		
 				if (_isDirty)
 				{
-
+					
+					if (_waitForNextFrame != 1)
+					{
+						_waitForNextFrame ++;
+						return;
+					}
+					_waitForNextFrame = 0;
 					_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
 					//_context3D.clear();
 					if (!_renderTextureInitialized)
 					{
-						_context3D.clear();
+						_context3D.clear(1,1,1,0);
 						_renderTextureInitialized = true;
 					}
 					
 					var x:Number = 0;
 					var y:Number = 0;
-					for(var key:String in _newTextureWrappersMap)
+					var texture:TextureWrapper;
+					var length:uint = _newTextureWrappersList.length;
+					_newTextureWrappersList.sort(sortOnSize);
+					
+					for (var i:int = length - 1; i >= 0; i--)
 					{
-						var texture:TextureWrapper = _newTextureWrappersMap[key];
+						texture = _newTextureWrappersList[i];
 						if (_currentX + texture.width > _atlasWidth)
 						{
 							_currentX = 0;
@@ -217,9 +231,8 @@ package de.domigotchi.stage3d.dynamicAtlas
 						_currentHeight = _currentY + texture.height;
 						_currentMaxY = _currentMaxY < _currentHeight ? _currentHeight : _currentMaxY;
 						_currentX += texture.width;
-						delete(_newTextureWrappersMap[key]);
-						
 					}
+					_newTextureWrappersList.length = 0;
 					_isDirty = false;
 					_context3D.setRenderToBackBuffer();
 					
@@ -234,6 +247,14 @@ package de.domigotchi.stage3d.dynamicAtlas
 				_context3D.setScissorRectangle(null);
 			}
 
+		}
+		
+		private function sortOnSize(a:TextureWrapper, b:TextureWrapper):int 
+		{
+			if (a.width * a.height <= b.width * b.height)
+				return -1;
+			else
+				return 1;
 		}
 		
 		private function draw(x:Number, y:Number, texture:TextureWrapper):void

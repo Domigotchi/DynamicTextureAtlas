@@ -86,8 +86,10 @@ package de.domigotchi.stage3d.dynamicAtlas
 		{
 			if (!_isInUse)
 			{
-				if(!_isAvailable && _textureFactory)
+				if (!_isAvailable && _textureFactory && !_textureFactory.isPreparing)
+				{
 					_textureFactory.prepare();
+				}
 				
 				_isInUse = true;
 			}

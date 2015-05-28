@@ -48,8 +48,8 @@ package de.domigotchi.stage3d.dynamicAtlas.extensions
 			
 			return super.transformationMatrix;
 		}
-		
-		override public function get base():TextureBase 
+		[Inline]
+		final override public function get base():TextureBase 
 		{
 			if (_textureWrapper.uvChangeCounter != _uvChangeCounter)
 			{

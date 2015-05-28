@@ -81,6 +81,11 @@ package de.domigotchi.stage3d.dynamicAtlas.factories
 					loadFileAsnc2(_path);
 			}
 		}
+		[Inline]
+		final public function get isPreparing():Boolean 
+		{
+			return _isPreparing;
+		}
 		
 		private function loadFileAsnc2(path:String):void 
 		{
@@ -138,27 +143,17 @@ package de.domigotchi.stage3d.dynamicAtlas.factories
 		
 		private function onUploadComplete(e:Event):void 
 		{
-			_isPreparing = false;
 			for (var i:int; i < _onCompleteCallbacks.length; i++)
 			{
 				_onCompleteCallbacks[i](this);
 			}
+			_isPreparing = false;
 		}
 		
 		
 		public function get id():String 
 		{
 			return _id;
-		}
-		
-		public function get width():int 
-		{
-			return 128;
-		}
-		
-		public function get height():int 
-		{
-			return 128;
 		}
 		
 		public function get textureWrapper():TextureWrapper 
