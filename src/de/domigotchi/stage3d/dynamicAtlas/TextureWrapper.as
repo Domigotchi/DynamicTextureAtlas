@@ -222,7 +222,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 			return _uvRegion;
 		}
 		
-		internal function setUVRegion(x:Number, y:Number, width:Number, height:Number):void 
+		public function setUVRegion(x:Number, y:Number, width:Number, height:Number):void 
 		{
 			_uvRegion.setTo(x, y, width, height);
 			_uvChangeCounter++;
