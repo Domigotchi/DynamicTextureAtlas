@@ -25,7 +25,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 	 */
 	public class DynamicTextureAtlas 
 	{
-		static public const DEBUG:Boolean = true;
+		static public const DEBUG:Boolean = false;
 		
 		
 		private var _vertexBufferBytes:ByteArray = new ByteArray();
@@ -309,16 +309,22 @@ internal class InternalPacker implements ITexturePacker
 	private var _width:uint;
 	private var _height:uint;
 	private var _padding:uint;
+	private var _unpackedWidth:uint = 0;
+	private var _unpackedHeight:uint = 0;
+	
+	private var _packedWidth:uint = 0;
+	private var _packedHeight:uint = 0;
+	
 	private var _textureWrapperMap:Dictionary = new Dictionary();
-	private var _textureWrapperList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
+	private var _unpackedWrapperList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
+	private var _allWrappersList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
 	
-	private var _currentX:int = 0;
-	private var _currentHeight:int = 0;
-	private var _currentY:int = 0;
-	private var _currentMaxY:int = 0;
 	
+	private	var _totalPackedPixels:uint = 0;
 	private var _freeSpaces:Vector.<Space> = new Vector.<Space>();
 	private var _packedSpaces:Vector.<Space> = new Vector.<Space>();
+	private var _IsResetEnforced:Boolean = false;
+	
 	
 	public function InternalPacker()
 	{
@@ -339,34 +345,145 @@ internal class InternalPacker implements ITexturePacker
 	
 	public function insertTexture(textureWrapper:TextureWrapper):void
 	{
+		if (_textureWrapperMap[textureWrapper.id]) return;
+		
 		_textureWrapperMap[textureWrapper.id] = textureWrapper;
-		_textureWrapperList[_textureWrapperList.length] = textureWrapper;
+		_allWrappersList[_allWrappersList.length] = textureWrapper;
+		_unpackedWrapperList[_unpackedWrapperList.length] = textureWrapper;
+		_unpackedWidth += textureWrapper.width;
+		_unpackedHeight += textureWrapper.height;
 	}
 	
 	
 	public function packTextures():Boolean 
 	{
-		_textureWrapperList.sort(sortOnSize);
+		_unpackedWrapperList.sort(sortOnSize);
 		var textureWrapper:TextureWrapper;
-		for (var i:uint = 0; i < _textureWrapperList.length; i++)
+		while (_unpackedWrapperList.length > 0)
 		{
-			textureWrapper = _textureWrapperList[i];
-			var space:Space = findAndConsumeFreeSpace(textureWrapper.width + _padding, textureWrapper.height + _padding);
-			if (space)
+			textureWrapper = _unpackedWrapperList.pop();
+			var space:Space = findAndConsumeFreeSpaceAspect(textureWrapper.width, textureWrapper.height);
+			if (!space) 
 			{
-				textureWrapper.setUVRegion(space.x, space.y, space.width, space.height);
+				if (!_IsResetEnforced)
+				{
+					trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
+					trace("atlas full: enforce reset")
+					_IsResetEnforced = true;
+					reset();
+				}
+				else
+				{
+					trace("atlas full: can't be solved");
+				}
+				
 			}
 			else
 			{
-				findAndConsumeFreeSpace(textureWrapper.width + _padding, textureWrapper.height + _padding);
-				trace("atlas is full");
+				_packedWidth += space.width;
+				_packedHeight += space.height;
+				_totalPackedPixels += space.width * space.height;
+				textureWrapper.setUVRegion(space.x, space.y, space.width, space.height);
+				
 			}
 		}
-		
+		_IsResetEnforced = false;
+		trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
 		return true;
 	}
 	
-	private function findAndConsumeFreeSpace(width:uint, height:uint):Space 
+	private function findAndConsumeFreeSpaceAspect(width:uint, height:uint):Space 
+	{
+		var bestSpace:Space;
+		var bestSpaceIndex:int = -1;
+		var currentSpace:Space;
+		var diffWidth:int;
+		var diffHeight:int;
+		for (var i:int = _freeSpaces.length - 1; i >= 0; i--)
+		{
+			currentSpace = _freeSpaces[i];
+			if (currentSpace.width >= width && currentSpace.height >= height)
+			{
+				if (bestSpace)
+				{
+					if (currentSpace.width == width && bestSpace.width != width)
+					{
+						diffHeight = currentSpace.height - bestSpace.height;
+						if (diffHeight < 0)
+						{
+							bestSpace = currentSpace;
+							bestSpaceIndex = i;
+						}
+					}
+					else if (currentSpace.height == height && bestSpace.height != height)
+					{
+						diffWidth =  currentSpace.width - bestSpace.width;
+						if (diffWidth < 0)
+						{
+							bestSpace = currentSpace;
+							bestSpaceIndex = i;
+						}
+					}
+					else
+					{
+						diffWidth =  currentSpace.width - bestSpace.width;
+						diffHeight = currentSpace.height - bestSpace.height;
+						if (diffWidth + diffHeight < 0)
+						{
+							bestSpace = currentSpace;
+							bestSpaceIndex = i;
+						}
+					}
+				}
+				else
+				{
+					bestSpace = currentSpace;
+					bestSpaceIndex = i;
+				}
+			}
+		}
+		if (bestSpace)
+		{
+			_freeSpaces.splice(bestSpaceIndex, 1);
+			if (bestSpace.width == width && bestSpace.height == height)
+			{
+				return bestSpace;
+			}
+			else
+			{
+				var offsetXSpace:Space;
+				if (bestSpace.width != width)
+				{
+					
+					offsetXSpace = new Space(bestSpace.x + width + _padding, bestSpace.y, bestSpace.width - width, bestSpace.height);
+					_freeSpaces[_freeSpaces.length] = offsetXSpace;
+				}
+				
+				if (bestSpace.height != height)
+				{
+					var offsetYSpace:Space = new Space(bestSpace.x, bestSpace.y + _padding + height, bestSpace.width, bestSpace.height - height);
+					_freeSpaces[_freeSpaces.length] = offsetYSpace;
+			
+					if (offsetXSpace)
+					{
+						var remainingWidth:uint = _unpackedWidth - _packedWidth;
+						var remainingHeight:uint = _unpackedHeight - _packedHeight;
+						var IsRemainingXSpaceBigger:Boolean = (offsetXSpace.width * offsetXSpace.height > offsetYSpace.width * offsetYSpace.height);
+						if (!IsRemainingXSpaceBigger || remainingWidth > remainingHeight)
+							offsetXSpace.height = height;
+						else
+							offsetYSpace.width = width;
+					}
+				}
+				bestSpace = new Space(bestSpace.x, bestSpace.y, width, height);
+				return bestSpace;
+			}
+		}
+		
+		return bestSpace;
+	}
+	
+	/*private function findAndConsumeFreeSpace(width:uint, height:uint):Space 
 	{
 		var bestSpace:Space;
 		var bestSpaceIndex:int = -1;
@@ -413,7 +530,7 @@ internal class InternalPacker implements ITexturePacker
 				
 				if (bestSpace.height != height)
 				{
-					var offsetYSpace:Space = new Space(bestSpace.x , bestSpace.y + height, bestSpace.width, bestSpace.height - height);
+					var offsetYSpace:Space = new Space(bestSpace.x, bestSpace.y + height, bestSpace.width, bestSpace.height - height);
 					_freeSpaces[_freeSpaces.length] = offsetYSpace;
 					if (offsetXSpace)
 					{
@@ -429,7 +546,7 @@ internal class InternalPacker implements ITexturePacker
 		}
 		
 		return bestSpace;
-	}
+	}*/
 	
 	/* INTERFACE de.domigotchi.stage3d.dynamicAtlas.ITexturePacker */
 	
@@ -438,7 +555,8 @@ internal class InternalPacker implements ITexturePacker
 		return _textureWrapperMap[id].bounds;
 	}
 	
-	private function sortOnSize(a:TextureWrapper, b:TextureWrapper):int 
+	[Inline]
+	final private function sortOnSize(a:TextureWrapper, b:TextureWrapper):int 
 	{
 		if (a.width * a.height <= b.width * b.height)
 			return -1;
@@ -448,10 +566,14 @@ internal class InternalPacker implements ITexturePacker
 	
 	public function reset():void
 	{
-		_currentX = 0;
-		_currentY = 0;
-		_currentMaxY = 0;
-		_currentHeight = 0;
+		_packedWidth = 0;
+		_packedHeight = 0;
+		_totalPackedPixels = 0;
+		_freeSpaces.length = 0;
+		_packedSpaces.length = 0;
+		_freeSpaces[0] = new Space(0,0, _width, _height);
+		_unpackedWrapperList = _allWrappersList.slice();
+		_unpackedWrapperList.sort(sortOnSize);
 	}
 	
 }
