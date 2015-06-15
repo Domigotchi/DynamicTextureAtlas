@@ -1,7 +1,5 @@
 package de.domigotchi.stage3d.dynamicAtlas 
 {
-	import atf.Encoder;
-	import atf.EncodingOptions;
 	import de.domigotchi.stage3d.dynamicAtlas.factories.TextureFactory;
 	import flash.display.BitmapData;
 	import flash.display3D.Context3D;
@@ -183,26 +181,6 @@ package de.domigotchi.stage3d.dynamicAtlas
 			return 1<<count;
 		}
 		
-		static public function createFromBitmapDataAsync(context3D:Context3D, id:String, bitmapData:BitmapData, onComplete:Function):TextureWrapper 
-		{
-			var orginalWidth:uint = bitmapData.width;
-			var orginalHeight:uint = bitmapData.height;
-			var nextPowerOfTwoWidth:uint = getNextPowerOf2(bitmapData.width);
-			var nextPowerOfTwoHeight:uint = getNextPowerOf2(bitmapData.height);
-			if (bitmapData.width != nextPowerOfTwoWidth || bitmapData.height != nextPowerOfTwoHeight)
-			{
-				var newBitmapData:BitmapData = new BitmapData(nextPowerOfTwoWidth, nextPowerOfTwoHeight, true);
-				newBitmapData.copyPixels(bitmapData, bitmapData.rect, _helperPoint);
-				bitmapData = newBitmapData;
-			}
-			var texture:Texture = context3D.createTexture(nextPowerOfTwoWidth, nextPowerOfTwoHeight, Context3DTextureFormat.BGRA, false);
-			texture.addEventListener(Event.TEXTURE_READY, onComplete);
-			var encodingOptions:EncodingOptions = new EncodingOptions();
-			encodingOptions.quantization = 0;
-			encodingOptions.mipmap = false;
-			texture.uploadCompressedTextureFromByteArray(Encoder.encode(bitmapData, encodingOptions, null), 0, true);
-			return new TextureWrapper(id, nextPowerOfTwoWidth, nextPowerOfTwoHeight).initWithTexture(texture);
-		}
 		
 		static public function createFromTexByteArray(context3D:Context3D, id:String, bytes:ByteArray, onComplete:Function):TextureWrapper 
 		{

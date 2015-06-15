@@ -129,16 +129,9 @@ package de.domigotchi.stage3d.dynamicAtlas.factories
 		private function onComplete(e:Event):void 
 		{
 			var bitmapData:BitmapData = ((e.target as LoaderInfo).content as Bitmap).bitmapData;
-			if (!_async)
-			{
-				_textureWrapper = TextureWrapper.createFromBitmapData(_stage3D.context3D, _id, bitmapData);
-				onUploadComplete(null);
-			}
-			else
-			{
-				_textureWrapper = TextureWrapper.createFromBitmapDataAsync(_stage3D.context3D, _id, bitmapData, onUploadComplete);
-			}
 			
+			_textureWrapper = TextureWrapper.createFromBitmapData(_stage3D.context3D, _id, bitmapData);
+			onUploadComplete(null);
 		}
 		
 		private function onUploadComplete(e:Event):void 
