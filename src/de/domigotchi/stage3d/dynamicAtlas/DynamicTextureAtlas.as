@@ -46,6 +46,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _atlasTexturesMap:Dictionary = new Dictionary();
 		
 		private var _orginalTextureWrappersList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
+		private var _streamedTextureWrappersList:Vector.<TextureWrapper> = new Vector.<TextureWrapper>();
 		private var _numTextures:uint = 0;
 		private var _program3D:Program3D;
 		
@@ -174,6 +175,8 @@ package de.domigotchi.stage3d.dynamicAtlas
 			currentTextureWrapper.initWithTexture(factory.textureWrapper.nativeTexture, factory.textureWrapper.width, factory.textureWrapper.height);
 			_texturePacker.insertTexture(factory.textureWrapper);
 			_orginalTextureWrappersList[_orginalTextureWrappersList.length] = factory.textureWrapper;
+			if(_bIsTextureStreamingEnabled)
+				_streamedTextureWrappersList[_streamedTextureWrappersList.length] = factory.textureWrapper;
 			_isDirty = true;
 		}
 		
@@ -186,6 +189,8 @@ package de.domigotchi.stage3d.dynamicAtlas
 			{
 				subTexture = _renderTexture.getSubTexture(InTexture.id, InTexture.width, InTexture.height);
 				_orginalTextureWrappersList[_orginalTextureWrappersList.length] = InTexture;
+				if(_bIsTextureStreamingEnabled)
+				_streamedTextureWrappersList[_streamedTextureWrappersList.length] = InTexture;
 				_texturePacker.insertTexture(InTexture);
 				_atlasTexturesMap[InTexture.id] = subTexture;
 				_numTextures ++;
@@ -225,17 +230,20 @@ package de.domigotchi.stage3d.dynamicAtlas
 						_renderTextureInitialized = true;
 					}
 					
-					_texturePacker.packTextures();
+					
 					
 					var texture:TextureWrapper;
 					if (_bIsTextureStreamingEnabled)
 					{
-						var length:uint = _orginalTextureWrappersList.length;
+						var wasPackSuccessful:Boolean = _texturePacker.packTextures();
+						if (!wasPackSuccessful)
+							_streamedTextureWrappersList = _orginalTextureWrappersList.slice();
+						var length:uint = _streamedTextureWrappersList.length;
 						for (var i:int = length - 1; i >= 0; i--)
 						{
-							draw(_orginalTextureWrappersList[i]);
+							draw(_streamedTextureWrappersList[i]);
 						}
-						_orginalTextureWrappersList.length = 0;
+						_streamedTextureWrappersList.length = 0;
 					}
 					else
 					{
@@ -359,6 +367,7 @@ internal class InternalPacker implements ITexturePacker
 	{
 		_unpackedWrapperList.sort(sortOnSize);
 		var textureWrapper:TextureWrapper;
+		var needsReorder:Boolean = false;
 		while (_unpackedWrapperList.length > 0)
 		{
 			textureWrapper = _unpackedWrapperList.pop();
@@ -371,6 +380,7 @@ internal class InternalPacker implements ITexturePacker
 					trace("atlas full: enforce reset")
 					_IsResetEnforced = true;
 					reset();
+					needsReorder = true;
 				}
 				else
 				{
@@ -389,7 +399,7 @@ internal class InternalPacker implements ITexturePacker
 		}
 		_IsResetEnforced = false;
 		trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
-		return true;
+		return needsReorder;
 	}
 	
 	private function findAndConsumeFreeSpaceAspect(width:uint, height:uint):Space 
