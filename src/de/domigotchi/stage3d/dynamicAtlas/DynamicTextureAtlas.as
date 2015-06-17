@@ -65,7 +65,6 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _helperRectangle:Rectangle = new Rectangle();
 		
 		private var _bIsTextureStreamingEnabled:Boolean = true;
-		private var _waitForNextFrame:int;
 		private var _padding:uint;
 		private var _texturePacker:ITexturePacker;
 		private var _useDoubleBuffering:Boolean = true;
@@ -235,17 +234,6 @@ package de.domigotchi.stage3d.dynamicAtlas
 		
 				if (_isDirty)
 				{
-					
-					if (_waitForNextFrame != 1)
-					{
-						_waitForNextFrame ++;
-						return false;
-					}
-					_waitForNextFrame = 0;
-					
-					
-					
-					
 					
 					if (!_renderTextureInitialized)
 					{
