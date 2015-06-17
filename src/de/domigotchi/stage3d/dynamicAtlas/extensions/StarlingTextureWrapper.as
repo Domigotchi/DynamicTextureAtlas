@@ -8,6 +8,7 @@ package de.domigotchi.stage3d.dynamicAtlas.extensions
 	import starling.textures.ConcreteTexture;
 	import starling.textures.SubTexture;
 	import starling.textures.Texture;
+	
 	/**
 	 * ...
 	 * @author Dominik Saur
@@ -48,6 +49,7 @@ package de.domigotchi.stage3d.dynamicAtlas.extensions
 			
 			return super.transformationMatrix;
 		}
+		
 		[Inline]
 		final override public function get base():TextureBase 
 		{

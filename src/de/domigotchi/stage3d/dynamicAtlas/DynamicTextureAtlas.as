@@ -12,6 +12,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 	import flash.display3D.Context3DVertexBufferFormat;
 	import flash.display3D.IndexBuffer3D;
 	import flash.display3D.Program3D;
+	import flash.display3D.textures.RectangleTexture;
 	import flash.display3D.textures.Texture;
 	import flash.display3D.textures.TextureBase;
 	import flash.display3D.VertexBuffer3D;
@@ -53,6 +54,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _atlasWidth:int;
 		private var _atlasHeight:int;
 		private var _renderTexture:TextureWrapper;
+		private var _swapTexture:TextureWrapper;
 		private var _renderTextureInitialized:Boolean;
 		
 		
@@ -66,6 +68,9 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _waitForNextFrame:int;
 		private var _padding:uint;
 		private var _texturePacker:ITexturePacker;
+		private var _useDoubleBuffering:Boolean = true;
+		private var _useSwapBuffer:Boolean = false;
+		
 		
 		public function DynamicTextureAtlas(stage3D:Stage3D, width:uint, height:uint, padding:uint = 1, bIsTextureStreamingEnabled = false, texturePacker:ITexturePacker = null) 
 		{
@@ -97,6 +102,9 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private function init():void 
 		{
 			_renderTexture = new TextureWrapper("DynamicTextureAtlas", _atlasWidth, _atlasHeight);
+			if (_useDoubleBuffering)
+				_swapTexture = new TextureWrapper("DynamicTextureAtlasSwap", _atlasWidth, _atlasHeight);
+			
 			_stage3D.addEventListener(Event.CONTEXT3D_CREATE, onContextCreated);
 			
 			if (!_vertexShaderBytes || !_fragmentShaderBytes)
@@ -130,19 +138,31 @@ package de.domigotchi.stage3d.dynamicAtlas
 			_indexBuffer.uploadFromByteArray(_indexBufferBytes, 0, 0, DynamicQuad.NUM_INDICES);
 			
 			var texture:TextureBase;
+			var swapTexture:TextureBase;
 			try
 			{
 				texture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
+				if (_useDoubleBuffering)
+					swapTexture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
 			catch (e:Error)
 			{
 				_atlasWidth = TextureWrapper.getNextPowerOf2(_atlasWidth);
 				_atlasHeight = TextureWrapper.getNextPowerOf2(_atlasHeight);
 				_texturePacker.setSizes(_atlasWidth, _atlasHeight, _padding);
+				
 				texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
+				
+				if (_useDoubleBuffering)
+					swapTexture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
-			_renderTexture.initWithTexture(texture);
+			
+			_renderTexture.initWithTexture(texture, _atlasWidth, _atlasHeight);
+			if (_useDoubleBuffering)
+				_swapTexture.initWithTexture(swapTexture, _atlasWidth, _atlasHeight);
 			_renderTextureInitialized = false;
+			
+			
 			
 			if (_isDirty)
 				update();
@@ -201,9 +221,9 @@ package de.domigotchi.stage3d.dynamicAtlas
 		}
 
 		
-		public function update():void
+		public function update():Boolean
 		{
-			if (!_context3D) return;
+			if (!_context3D) return false;
 			
 			if (_isDirty || DEBUG)
 			{
@@ -219,25 +239,61 @@ package de.domigotchi.stage3d.dynamicAtlas
 					if (_waitForNextFrame != 1)
 					{
 						_waitForNextFrame ++;
-						return;
+						return false;
 					}
 					_waitForNextFrame = 0;
-					_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+					
+					
+					
+					
 					
 					if (!_renderTextureInitialized)
 					{
-						_context3D.clear(1, 1, 1, 0);
+						_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+						_context3D.clear(0, 0, 0, 0);
+						if (_useDoubleBuffering)
+						{
+							_context3D.setRenderToTexture(_swapTexture.nativeTexture, false);
+							_context3D.clear(0, 0, 0, 0);
+						}
 						_renderTextureInitialized = true;
 					}
-					
-					
 					
 					var texture:TextureWrapper;
 					if (_bIsTextureStreamingEnabled)
 					{
-						var wasPackSuccessful:Boolean = _texturePacker.packTextures();
-						if (!wasPackSuccessful)
+						
+						if (_useDoubleBuffering)
+						{
+							var renderTarget:TextureWrapper;
+							var content:TextureWrapper;
+							if (_useSwapBuffer)
+							{
+								renderTarget = _swapTexture;
+								content = _renderTexture;
+							}
+							else
+							{
+								renderTarget = _renderTexture;
+								content = _swapTexture;
+							}
+							
+							_context3D.setRenderToTexture(renderTarget.nativeTexture);
+							_drawQuad.init(0, 0, 1, 1);
+							draw(content);
+							_useSwapBuffer = !_useSwapBuffer;
+						}
+						else
+						{
+							_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+						}
+						var needsReorder:Boolean = _texturePacker.packTextures();
+						if (needsReorder)
+						{
 							_streamedTextureWrappersList = _orginalTextureWrappersList.slice();
+							_context3D.clear(0,0,0,0);
+						}
+						
 						var length:uint = _streamedTextureWrappersList.length;
 						for (var i:int = length - 1; i >= 0; i--)
 						{
@@ -246,10 +302,11 @@ package de.domigotchi.stage3d.dynamicAtlas
 						_streamedTextureWrappersList.length = 0;
 					}
 					else
-					{
+					{						
+						_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+						
 						_texturePacker.reset();
 						_texturePacker.packTextures();
-						//_context3D.clear();
 						for each(texture in _orginalTextureWrappersList)
 						{
 							draw(texture);
@@ -258,7 +315,6 @@ package de.domigotchi.stage3d.dynamicAtlas
 					
 					_isDirty = false;
 					_context3D.setRenderToBackBuffer();
-					
 				}
 				if (DEBUG)
 				{
@@ -269,8 +325,15 @@ package de.domigotchi.stage3d.dynamicAtlas
 				_context3D.setVertexBufferAt(1, null);
 				_context3D.setTextureAt(0, null);
 				_context3D.setScissorRectangle(null);
+				return true;
 			}
+			return false;
 
+		}
+		
+		private function createSwapTexture():TextureBase 
+		{
+			return _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 		}
 		
 		
@@ -465,13 +528,13 @@ internal class InternalPacker implements ITexturePacker
 				if (bestSpace.width != width)
 				{
 					
-					offsetXSpace = new Space(bestSpace.x + width + _padding, bestSpace.y, bestSpace.width - width, bestSpace.height);
+					offsetXSpace = new Space(bestSpace.x + width + _padding, bestSpace.y, bestSpace.width - (width + _padding), bestSpace.height);
 					_freeSpaces[_freeSpaces.length] = offsetXSpace;
 				}
 				
 				if (bestSpace.height != height)
 				{
-					var offsetYSpace:Space = new Space(bestSpace.x, bestSpace.y + _padding + height, bestSpace.width, bestSpace.height - height);
+					var offsetYSpace:Space = new Space(bestSpace.x, bestSpace.y + _padding + height, bestSpace.width, bestSpace.height - (height + _padding));
 					_freeSpaces[_freeSpaces.length] = offsetYSpace;
 			
 					if (offsetXSpace)
@@ -492,71 +555,6 @@ internal class InternalPacker implements ITexturePacker
 		
 		return bestSpace;
 	}
-	
-	/*private function findAndConsumeFreeSpace(width:uint, height:uint):Space 
-	{
-		var bestSpace:Space;
-		var bestSpaceIndex:int = -1;
-		var currentSpace:Space;
-		var diffWidth:int;
-		var diffHeight:int;
-		for (var i:uint; i < _freeSpaces.length; i++)
-		{
-			currentSpace = _freeSpaces[i];
-			if (currentSpace.width >= width && currentSpace.height >= height)
-			{
-				if (bestSpace)
-				{
-					diffWidth =  currentSpace.width - bestSpace.width;
-					diffHeight = currentSpace.height - bestSpace.height;
-					if (diffWidth + diffHeight < 0)
-					{
-						bestSpace = currentSpace;
-						bestSpaceIndex = i;
-					}
-				}
-				else
-				{
-					bestSpace = currentSpace;
-					bestSpaceIndex = i;
-				}
-			}
-		}
-		if (bestSpace)
-		{
-			_freeSpaces.splice(bestSpaceIndex, 1);
-			if (bestSpace.width == width && bestSpace.height == height)
-			{
-				return bestSpace;
-			}
-			else
-			{
-				var offsetXSpace:Space;
-				if (bestSpace.width != width)
-				{
-					offsetXSpace = new Space(bestSpace.x + width, bestSpace.y, bestSpace.width - width, bestSpace.height);
-					_freeSpaces[_freeSpaces.length] = offsetXSpace;
-				}
-				
-				if (bestSpace.height != height)
-				{
-					var offsetYSpace:Space = new Space(bestSpace.x, bestSpace.y + height, bestSpace.width, bestSpace.height - height);
-					_freeSpaces[_freeSpaces.length] = offsetYSpace;
-					if (offsetXSpace)
-					{
-						if (offsetXSpace.width * offsetXSpace.height < offsetYSpace.width * offsetYSpace.height)
-							offsetXSpace.height = height;
-						else
-							offsetYSpace.width = width;
-					}
-				}
-				bestSpace = new Space(bestSpace.x, bestSpace.y, width, height);
-				return bestSpace;
-			}
-		}
-		
-		return bestSpace;
-	}*/
 	
 	/* INTERFACE de.domigotchi.stage3d.dynamicAtlas.ITexturePacker */
 	
