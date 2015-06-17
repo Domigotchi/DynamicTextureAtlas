@@ -44,12 +44,6 @@ package de.domigotchi.stage3d.dynamicAtlas.extensions
 			return _textureWrapper.height;
 		}
 		
-		override public function get transformationMatrix():Matrix 
-		{
-			
-			return super.transformationMatrix;
-		}
-		
 		[Inline]
 		final override public function get base():TextureBase 
 		{
