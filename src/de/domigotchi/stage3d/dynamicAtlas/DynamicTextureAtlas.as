@@ -67,8 +67,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _bIsTextureStreamingEnabled:Boolean = true;
 		private var _padding:uint;
 		private var _texturePacker:ITexturePacker;
-		private var _useDoubleBuffering:Boolean = true;
-		private var _useSwapBuffer:Boolean = false;
+		private var _useDoubleBuffering:Boolean = false;
 		
 		
 		public function DynamicTextureAtlas(stage3D:Stage3D, width:uint, height:uint, padding:uint = 1, bIsTextureStreamingEnabled = false, texturePacker:ITexturePacker = null) 
@@ -315,11 +314,11 @@ package de.domigotchi.stage3d.dynamicAtlas
 			var height:Number = texture.height / _atlasHeight;
 			_drawQuad.init(x, y, width, height);
 			
-			_helperRectangle.setTo(x * _atlasWidth, y * _atlasHeight, texture.width, texture.height);
+			/*_helperRectangle.setTo(x * _atlasWidth, y * _atlasHeight, texture.width, texture.height);
 			if(_helperRectangle.x < _atlasWidth && _helperRectangle.y < _atlasHeight)
 				_context3D.setScissorRectangle(_helperRectangle);
 			else
-				_context3D.setScissorRectangle(null);
+				_context3D.setScissorRectangle(null);*/
 			var subTexture:TextureWrapper = _atlasTexturesMap[texture.id];
 			if (subTexture)
 				subTexture.setUVRegion(x * _atlasWidth , y * _atlasHeight, width * _atlasWidth, height * _atlasHeight);
@@ -345,6 +344,7 @@ import flash.utils.Dictionary;
 import de.domigotchi.stage3d.dynamicAtlas.TextureWrapper;
 internal class InternalPacker implements ITexturePacker
 {
+	private static const DEBUG:Boolean = false;
 	private var _width:uint;
 	private var _height:uint;
 	private var _padding:uint;
@@ -399,7 +399,8 @@ internal class InternalPacker implements ITexturePacker
 		_unpackedWrapperList.sort(sortOnSize);
 		var textureWrapper:TextureWrapper;
 		var needsReorder:Boolean = false;
-		while (_unpackedWrapperList.length > 0)
+		var isPackingPossible:Boolean = true;
+		while(isPackingPossible && _unpackedWrapperList.length > 0)
 		{
 			textureWrapper = _unpackedWrapperList.pop();
 			var space:Space = findAndConsumeFreeSpaceAspect(textureWrapper.width, textureWrapper.height);
@@ -407,15 +408,22 @@ internal class InternalPacker implements ITexturePacker
 			{
 				if (!_IsResetEnforced)
 				{
-					trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
-					trace("atlas full: enforce reset")
+					if (DEBUG)
+					{
+						trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
+						trace("atlas full: enforce reset");
+					}
 					_IsResetEnforced = true;
 					reset();
 					needsReorder = true;
 				}
 				else
 				{
-					trace("atlas full: can't be solved");
+					isPackingPossible = false;
+					if (DEBUG)
+					{
+						trace("atlas full: can't be solved");
+					}
 				}
 				
 			}
@@ -429,7 +437,10 @@ internal class InternalPacker implements ITexturePacker
 			}
 		}
 		_IsResetEnforced = false;
-		trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
+		if (DEBUG)
+		{
+			trace( (_totalPackedPixels / (_width * _height)) * 100 , "% used of atlas") ;
+		}
 		return needsReorder;
 	}
 	
