@@ -54,7 +54,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private var _atlasWidth:int;
 		private var _atlasHeight:int;
 		private var _renderTexture:TextureWrapper;
-		private var _swapTexture:TextureWrapper;
+		private var _swapTexture:TextureBase;
 		private var _renderTextureInitialized:Boolean;
 		
 		
@@ -101,8 +101,6 @@ package de.domigotchi.stage3d.dynamicAtlas
 		private function init():void 
 		{
 			_renderTexture = new TextureWrapper("DynamicTextureAtlas", _atlasWidth, _atlasHeight);
-			if (_useDoubleBuffering)
-				_swapTexture = new TextureWrapper("DynamicTextureAtlasSwap", _atlasWidth, _atlasHeight);
 			
 			_stage3D.addEventListener(Event.CONTEXT3D_CREATE, onContextCreated);
 			
@@ -113,7 +111,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 												"mul v0, va1.xy, vc1.xy";*/
 				var vertexShaderString:String = "mov op, vc[va0.x]\n" +
 												"mul v0, va1.xy, vc4.xy";
-				var fragmentShaderString:String = "tex oc, v0, fs0 <2d>";
+				var fragmentShaderString:String = "tex oc, v0, fs0 <2d, nearest, nomip>";
 				
 				_vertexShaderBytes = assembler.assemble("vertex", vertexShaderString);
 				_fragmentShaderBytes  = assembler.assemble("fragment", fragmentShaderString);
@@ -142,7 +140,7 @@ package de.domigotchi.stage3d.dynamicAtlas
 			{
 				texture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 				if (_useDoubleBuffering)
-					swapTexture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
+					_swapTexture = _context3D.createRectangleTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
 			catch (e:Error)
 			{
@@ -153,15 +151,18 @@ package de.domigotchi.stage3d.dynamicAtlas
 				texture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 				
 				if (_useDoubleBuffering)
-					swapTexture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
+					_swapTexture = _context3D.createTexture(_atlasWidth, _atlasHeight, Context3DTextureFormat.BGRA, true);
 			}
 			
 			_renderTexture.initWithTexture(texture, _atlasWidth, _atlasHeight);
+			
+			_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
+			_context3D.clear(0, 0, 0, 0);
 			if (_useDoubleBuffering)
-				_swapTexture.initWithTexture(swapTexture, _atlasWidth, _atlasHeight);
-			_renderTextureInitialized = false;
-			
-			
+			{
+				_context3D.setRenderToTexture(_swapTexture, false);
+				_context3D.clear(0, 0, 0, 0);
+			}
 			
 			if (_isDirty)
 				update();
@@ -235,41 +236,20 @@ package de.domigotchi.stage3d.dynamicAtlas
 				if (_isDirty)
 				{
 					
-					if (!_renderTextureInitialized)
-					{
-						_context3D.setRenderToTexture(_renderTexture.nativeTexture, false);
-						_context3D.clear(0, 0, 0, 0);
-						if (_useDoubleBuffering)
-						{
-							_context3D.setRenderToTexture(_swapTexture.nativeTexture, false);
-							_context3D.clear(0, 0, 0, 0);
-						}
-						_renderTextureInitialized = true;
-					}
-					
 					var texture:TextureWrapper;
 					if (_bIsTextureStreamingEnabled)
 					{
 						
 						if (_useDoubleBuffering)
 						{
-							var renderTarget:TextureWrapper;
-							var content:TextureWrapper;
-							if (_useSwapBuffer)
-							{
-								renderTarget = _swapTexture;
-								content = _renderTexture;
-							}
-							else
-							{
-								renderTarget = _renderTexture;
-								content = _swapTexture;
-							}
-							
-							_context3D.setRenderToTexture(renderTarget.nativeTexture);
+							var lastTexture:TextureBase = _renderTexture.nativeTexture;
+							_context3D.setRenderToTexture(_swapTexture);
+							_context3D.clear();
 							_drawQuad.init(0, 0, 1, 1);
-							draw(content);
-							_useSwapBuffer = !_useSwapBuffer;
+							draw(_renderTexture);
+							_renderTexture.initWithTexture(_swapTexture, _atlasWidth, _atlasHeight);
+							_swapTexture = lastTexture;
+							
 						}
 						else
 						{
@@ -325,8 +305,8 @@ package de.domigotchi.stage3d.dynamicAtlas
 		}
 		
 		
-		
-		private function draw(texture:TextureWrapper):void
+		[Inline]
+		final private function draw(texture:TextureWrapper):void
 		{
 			var region:Rectangle = texture.getUVRegion();
 			var x:Number = region.x/_atlasWidth;
